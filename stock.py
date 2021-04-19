@@ -158,36 +158,7 @@ class stock():
 		plt.ylim(df[len(df)-1]-5,df[len(df)-1]+5)
 		return(fc_series)
 
-	def ExpReturn0(self):
-		df = self.MA()
-		n=len(df)
-		EReturn=0
-		for i in range(n): 
-			df1=pd.DataFrame(df['close'])
-			df1.index=[i for i in range(len(df1))]
-			df1=df1.close
-			model = pm.auto_arima(df1, start_p=1, start_q=1,
-						information_criterion='aic',
-						test='adf',       # use adftest to find optimal 'd'
-						max_p=5, max_q=5, # maximum p and q
-						m=1,              # frequency of series
-						d=None,           # let model determine 'd'
-						seasonal=False,   # No Seasonality
-						start_P=0, 
-						D=0, 
-						trace=True,
-						error_action='ignore',  
-						suppress_warnings=True, 
-						stepwise=True)
-			fc, confint = model.predict(n_periods=self.__n_periods__, return_conf_int=True)
-			fc_series = pd.Series(fc) 		
-			forcast=fc_series.iloc[0]
-			now=df1[len(df1)-1]
-			Expr=(forcast-now)/now
-			EReturn+=(Expr)/n
-		return(EReturn)
-
-	def ExpReturn(self):
+	def ExpReturn1(self):
 		'''
 		计算期望收益率
 		'''
