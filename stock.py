@@ -12,6 +12,8 @@ import matplotlib.dates as mdates
 import scipy.optimize as sco
 import math
 
+
+
 '''
 金融数量分析计算框架
 stock 主要实现股票技术分析数据制作、作图、期望收益率计算
@@ -24,8 +26,24 @@ plan 具体实现投资计划
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei'] #设置显示图片中文字符
 
 '''
+ 计算无风险利率
+ 这里采用0年期(短期)国债平均收益率
+ 数据来源(截止至2021/4/21)：
+ http://yield.chinabond.com.cn/cbweb-mn/yc/downYearBzqxList?wrjxCBFlag=0&&zblx=txy&&ycDefId=2c9081e50a2f9606010a3068cae70001
+
+''' 
+data=pd.read_csv('2021年中债国债收益率曲线标准期限信息.csv',encoding='gbk')
+RF=[]
+for i in range(len(data)):
+    if data['标准期限(年)'][i] == 0 :
+       RF.append(data['收益率(%)'][i]/100)
+RF=np.array(RF).mean()
+
+
+'''
 以下为框架主体
 '''
+
 class stock():
 	__n_periods__ = 10 #设置预测周期
 	def __init__(self,dataframe,name,day):
@@ -160,7 +178,7 @@ class stock():
 
 	def ExpReturn1(self):
 		'''
-		计算期望收益率
+		使用时间序列方法计算期望收益率
 		'''
 		model = self.forcast_model()
 		print(model.summary())
@@ -184,7 +202,7 @@ class stock():
 		Return=[]
 		for i in range(len(df)-1):
 			Return.append((df[i+1]-df[i])/df[i])
-		Return=np.var(np.array(Return))
+		Return=np.array(Return).mean()
 		#print('期望收益率为%s'%Return)
 		return(Return)	
 
@@ -200,7 +218,16 @@ class stock():
 		Return=[]
 		for i in range(len(df)-1):
 			Return.append((df[i+1]-df[i])/df[i])
-		return(Return)		
+		return(np.array(Return))
+	
+	@ property
+	def sharp_rate(self):
+		ER = self.His_Return().mean() # 资产的平均收益率
+		sigma = self.His_Return().std() # 资产收益率的标准差
+		rate = (ER-RF)/sigma
+		return rate
+
+
 
 '''
 求解马科维茨前缘组合
@@ -233,7 +260,73 @@ def frontcon(ExpReturn, ExpCovariance, NumPorts=10):
         target_variance.append(res['fun'])
         PortWts.append(res["x"])
     target_variance = np.array(target_variance)
-    return [target_variance, target_returns, PortWts]
+	# 有效前沿
+    postive_target_returns=[]
+    postive_target_variance=[]
+    for i in range(len(PortWts)-1):
+        if target_variance[i+1]>target_variance[i] :
+            postive_target_returns.append(target_returns[i])
+            postive_target_variance.append(target_variance[i])
+    postive_target_returns.append(target_returns[-1])
+    postive_target_variance.append(target_variance[-1])
+    return [target_variance, target_returns, PortWts, postive_target_returns, postive_target_variance]
+
+# 计算前沿组合的证券市场线及风险溢价  
+def Get_M(postive_target_returns,postive_target_variance,RF):
+    # 定义一个函数用来 计算 前后两点在 证券市场线上的值
+    def value(k,RF,x):
+        return k*x+RF
+    # 计算 M 点
+    K=[]
+    for i in range(len(postive_target_variance)):
+        k = (postive_target_returns[i]-RF)/postive_target_variance[i]
+        K.append(k)
+    
+    for i in range(len(postive_target_variance)): 
+        k=K[i]   
+        if i > 0 and i < len(postive_target_variance)-1 :
+            xl=postive_target_variance[i-1]
+            yl=postive_target_returns[i-1]
+            xr=postive_target_variance[i+1]
+            yr=postive_target_returns[i+1]
+            if value(k,RF,xl) > yl  and value(k,RF,xr) > yr :
+                M = i
+        elif i == 0 or i == len(postive_target_variance) :
+            M=K.index(max(K)) 
+    E_rm = K[M]
+    return [M,E_rm]
+
+# 计算资本市场线上的任意投资组合P的预期风险	
+def sigma_rp(ExpCov,PortWts,m):
+	'''
+	sigma(r_p)=[ ∑ ∑ w_i w_j cov( r_i , r_j ) ]^(1/2)
+	'''
+	sigma_r_p=0
+	w=PortWts[m]
+	for i in range(len(ExpCov)):
+		for j in range(len(ExpCov)):
+			cov_ri_rj = ExpCov[i][j]
+			sigma_r_p += w[i]*w[j]*cov_ri_rj
+	return sigma_r_p
+
+# 计算组合的beta系数
+def beta(sigma_rp,singma_rm): 
+	'''
+	sigma_rp 是资本市场线是 资本市场组合 的预期风险
+	sigma_rm 是组合前沿上 m点的 风险组合 的预期风险
+
+	（2）该证券对风险资产市场组合风险的贡献
+		程度，也就是系统性风险系数 ，这也是决定
+		该项证券期望收益的关键因素。
+		beta>1：该证券的风险补偿大于市场组合的风
+		险补偿 (进取型证券)
+		beta<1：该证券的风险补偿小于市场组合的风
+		险补偿 （防御型证券)
+
+	由 beta_p = ∑ w_i*beta_i 可以得出每支股票的beta值 
+	'''
+	return sigma_rp/singma_rm
+
 
 '''
 按照选择的组合计算股票购买量
