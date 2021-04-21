@@ -43,7 +43,21 @@ RF=np.array(RF).mean()
 '''
 以下为框架主体
 '''
-
+'''
+<1>读取股票数据并根据股票代码返回股票名称
+'''
+stock_zh_a_spot_df=pd.read_csv('stock_zh_a_spot_df.csv')
+def code_to_name(code,df=stock_zh_a_spot_df):
+	if code in list(df['代码']):
+		i = list(df['代码']).index(code)
+		name = list(df['名称'])[i]
+	else:
+		print('该股票代码不存在')
+		name = 'error'
+	return name
+'''
+<2> k线、预测 及 期望收益率计算
+'''
 class stock():
 	__n_periods__ = 10 #设置预测周期
 	def __init__(self,dataframe,name,day):
@@ -230,7 +244,7 @@ class stock():
 
 
 '''
-求解马科维茨前缘组合
+<3>求解马科维茨前缘组合
 '''
 def frontcon(ExpReturn, ExpCovariance, NumPorts=10):
     noa = len(ExpReturn)
@@ -270,8 +284,9 @@ def frontcon(ExpReturn, ExpCovariance, NumPorts=10):
     postive_target_returns.append(target_returns[-1])
     postive_target_variance.append(target_variance[-1])
     return [target_variance, target_returns, PortWts, postive_target_returns, postive_target_variance]
-
-# 计算前沿组合的证券市场线及风险溢价  
+'''
+<4> 计算前沿组合的证券市场线及风险溢价  
+'''
 def Get_M(postive_target_returns,postive_target_variance,RF):
     # 定义一个函数用来 计算 前后两点在 证券市场线上的值
     def value(k,RF,x):
@@ -295,8 +310,9 @@ def Get_M(postive_target_returns,postive_target_variance,RF):
             M=K.index(max(K)) 
     E_rm = K[M]
     return [M,E_rm]
-
-# 计算资本市场线上的任意投资组合P的预期风险	
+'''
+<5> 计算资本市场线上的任意投资组合P的预期风险	
+'''
 def sigma_rp(ExpCov,PortWts,m):
 	'''
 	sigma(r_p)=[ ∑ ∑ w_i w_j cov( r_i , r_j ) ]^(1/2)
@@ -308,8 +324,9 @@ def sigma_rp(ExpCov,PortWts,m):
 			cov_ri_rj = ExpCov[i][j]
 			sigma_r_p += w[i]*w[j]*cov_ri_rj
 	return sigma_r_p
-
-# 计算组合的beta系数
+'''
+<6> 计算组合的beta系数
+'''
 def beta(sigma_rp,singma_rm): 
 	'''
 	sigma_rp 是资本市场线是 资本市场组合 的预期风险
@@ -319,11 +336,13 @@ def beta(sigma_rp,singma_rm):
 		程度，也就是系统性风险系数 ，这也是决定
 		该项证券期望收益的关键因素。
 		beta>1：该证券的风险补偿大于市场组合的风
-		险补偿 (进取型证券)
+		险补偿  (进取型证券)
 		beta<1：该证券的风险补偿小于市场组合的风
 		险补偿 （防御型证券)
 
 	由 beta_p = ∑ w_i*beta_i 可以得出每支股票的beta值 
+
+	beta值也代表用于投资风险组合的资金比率
 	'''
 	return sigma_rp/singma_rm
 
@@ -343,4 +362,4 @@ class plan():
 			df = ak.stock_zh_a_daily(symbol=stock, adjust="qfq")
 			money=self.PortWts[i]*self.assets_amount
 			amount=math.floor(money/(df['close'][len(df)-1]*100))*100
-			print('股票%s购买%s股'%(stock,amount))
+			print('股票%s(%s)购买%s股'%(stock,code_to_name(stock),amount))

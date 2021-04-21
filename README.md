@@ -1,6 +1,20 @@
 # Stock-Finance-Algorithms
 Algorithms of Stock &amp; Finance Models
 
+* 初版功能
+
+  1、计算5/10/20日均线
+
+  2、基于ARIMA进行股票序列预测
+
+  3、基于ARIMA的期望收益率计算
+
+  4、历史平均收益率计算
+
+  5、求解马科维茨前沿组合
+
+  6、根据马科维茨前沿组合给出股票购买计划（向下取整）
+
 * 4/21 更新
 
   1、加入了无风险利率的计算
@@ -18,3 +32,5 @@ Algorithms of Stock &amp; Finance Models
   5、新增计算资本市场线上的任意投资组合P的预期风险 
   
   6、新增计算组合的beta系数βn
+  
+  7、新增根据股票代码得到股票名称
