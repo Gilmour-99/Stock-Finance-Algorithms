@@ -35,7 +35,7 @@ plt.rcParams['font.sans-serif'] = ['Microsoft YaHei'] #设置显示图片中文�
 data=pd.read_csv('2021年中债国债收益率曲线标准期限信息.csv',encoding='gbk')
 RF=[]
 for i in range(len(data)):
-    if data['标准期限(年)'][i] == 0 :
+    if data['标准期限(年)'][i] == 0.08 :
        RF.append(data['收益率(%)'][i]/100)
 RF=np.array(RF).mean()
 
@@ -102,7 +102,7 @@ class stock():
 		ax.text( df3.high.idxmax()-20, df3.high.max(),s =df3.high.max(), fontsize=8)
 		ax.text( df3.high.idxmin()-20, df3.high.min(),s = df3.high.min(), fontsize=8)
 		ax.set_facecolor("white")
-		ax.set_title(name)
+		ax.set_title('%s(%s)'%(name,code_to_name(name)))
 		plt.plot(df3['5'].values, alpha = 0.5, label='MA5')
 		plt.plot(df3['10'].values, alpha = 0.5, label='MA10')
 		plt.plot(df3['20'].values, alpha = 0.5, label='MID(MA20)',color='gray')
@@ -119,10 +119,16 @@ class stock():
 		使用arima模型进行收盘价的预测
 		'''
 		df1=self.MA()
-		df1=pd.DataFrame(df1['close'])
-		df1.index=[i for i in range(len(df1))]
-		df=df1.close
-		model = pm.auto_arima(df, start_p=1, start_q=1,
+		# 收盘价序列
+		df2=pd.DataFrame(df1['close'])
+		df2.index=[i for i in range(len(df1))]
+		df2=df2.close
+		# 开盘价序列
+		df3=pd.DataFrame(df1['open'])
+		df3.index=[i for i in range(len(df1))]
+		df3=df3.open
+		# 开盘价预测
+		model_open = pm.auto_arima(df3, start_p=1, start_q=1,
                       information_criterion='aic',
                       test='adf',       # use adftest to find optimal 'd'
                       max_p=5, max_q=5, # maximum p and q
@@ -135,71 +141,144 @@ class stock():
                       error_action='ignore',  
                       suppress_warnings=True, 
                       stepwise=True)
-		return(model)
+		# 收盘价预测
+		model_close = pm.auto_arima(df2, start_p=1, start_q=1,
+                      information_criterion='aic',
+                      test='adf',       # use adftest to find optimal 'd'
+                      max_p=5, max_q=5, # maximum p and q
+                      m=1,              # frequency of series
+                      d=None,           # let model determine 'd'
+                      seasonal=False,   # No Seasonality
+                      start_P=0, 
+                      D=0, 
+                      trace=True,
+                      error_action='ignore',  
+                      suppress_warnings=True, 
+                      stepwise=True)
+		return [model_open,model_close] 
+
+	def forcast(self):
+		df1=self.MA()
+		df2=pd.DataFrame(df1['close']) # 收盘价序列df2
+		df2.index=[i for i in range(len(df1))]
+		df2=df2.close
+		df2.reindex([i for i in range(len(df2))])
+
+		df3=pd.DataFrame(df1['open']) # 开盘价序列df3
+		df3.index=[i for i in range(len(df1))]
+		df3=df3.open
+		df3.reindex([i for i in range(len(df3))])
+		
+		model_open = self.forcast_model()[0]
+		model_close = self.forcast_model()[1]		
+		
+		print(model_open.summary())
+		print(model_close.summary())
+
+		fc1, confint1 = model_open.predict(n_periods=self.__n_periods__, return_conf_int=True)
+		index_of_fc1 = np.arange(len(df3), len(df1)+self.__n_periods__)
+		# make series for plotting purpose
+		fc_series_open = pd.Series(fc1, index=index_of_fc1-1)
+
+		fc2, confint2 = model_close.predict(n_periods=self.__n_periods__, return_conf_int=True)
+		index_of_fc2 = np.arange(len(df2), len(df2)+self.__n_periods__)
+		# make series for plotting purpose
+		fc_series_close = pd.Series(fc2, index=index_of_fc2-1)
+
+		return [fc_series_open.iloc[0],fc_series_close.iloc[0]]		
 
 	def forcast_plot(self):
+		def acf_pacf(df):
+			plt.rcParams.update({'figure.figsize':(9,7), 'figure.dpi':120})
+			fig, axes = plt.subplots(3, 3, sharex=False)
+			plt.subplots_adjust(wspace=0.2, hspace=0.3)
+			plt.rc('font', size=5)
+			# Original Series
+			axes[0, 0].plot(df); axes[0, 0].set_title('原序列')
+			plot_acf(df, ax=axes[0, 1])
+			plot_pacf(df, ax=axes[0, 2])
+			# 1st Differencing
+			axes[1, 0].plot(df.diff()); axes[1, 0].set_title('一阶差分序列')
+			plot_acf(df.diff().dropna(), ax=axes[1, 1])
+			plot_pacf(df.diff().dropna(), ax=axes[1, 2])
+			# 2nd Differencing
+			axes[2, 0].plot(df.diff().diff()); axes[2, 0].set_title('二阶差分序列')
+			plot_acf(df.diff().diff().dropna(), ax=axes[2, 1])
+			plot_pacf(df.diff().diff().dropna(), ax=axes[2, 2])
+			#Display pic
+			plt.show()
+
 		df1=self.MA()
-		df1=pd.DataFrame(df1['close'])
-		df1.index=[i for i in range(len(df1))]
-		df=df1.close
-		plt.rcParams.update({'figure.figsize':(9,7), 'figure.dpi':120})
-		fig, axes = plt.subplots(3, 3, sharex=False)
-		plt.subplots_adjust(wspace=0.2, hspace=0.3)
-		plt.rc('font', size=5)
-		# Original Series
-		axes[0, 0].plot(df); axes[0, 0].set_title('原序列')
-		plot_acf(df, ax=axes[0, 1])
-		plot_pacf(df, ax=axes[0, 2])
-		# 1st Differencing
-		axes[1, 0].plot(df.diff()); axes[1, 0].set_title('一阶差分序列')
-		plot_acf(df.diff().dropna(), ax=axes[1, 1])
-		plot_pacf(df.diff().dropna(), ax=axes[1, 2])
-		# 2nd Differencing
-		axes[2, 0].plot(df.diff().diff()); axes[2, 0].set_title('二阶差分序列')
-		plot_acf(df.diff().diff().dropna(), ax=axes[2, 1])
-		plot_pacf(df.diff().diff().dropna(), ax=axes[2, 2])
-		#Display pic
-		plt.show()
-		df.reindex([i for i in range(len(df))])
-		model = self.forcast_model()
-		print(model.summary())
-		# Forecast
-		fc, confint = model.predict(n_periods=self.__n_periods__, return_conf_int=True)
-		index_of_fc = np.arange(len(df), len(df)+self.__n_periods__)
+		df2=pd.DataFrame(df1['close']) # 收盘价序列df2
+		df2.index=[i for i in range(len(df1))]
+		df2=df2.close
+		acf_pacf(df2)
+		df2.reindex([i for i in range(len(df2))])
+
+		df3=pd.DataFrame(df1['open']) # 开盘价序列df3
+		df3.index=[i for i in range(len(df1))]
+		df3=df3.open
+		acf_pacf(df2)
+		df3.reindex([i for i in range(len(df3))])
+		
+		model_open = self.forcast_model()[0]
+		model_close = self.forcast_model()[1]		
+		
+		print(model_open.summary())
+		print(model_close.summary())
+
+		fc1, confint1 = model_open.predict(n_periods=self.__n_periods__, return_conf_int=True)
+		index_of_fc1 = np.arange(len(df3), len(df1)+self.__n_periods__)
 		# make series for plotting purpose
-		fc_series = pd.Series(fc, index=index_of_fc-1)
-		lower_series = pd.Series(confint[:, 0], index=index_of_fc-1)
-		upper_series = pd.Series(confint[:, 1], index=index_of_fc-1)
-		# plot resid
-		residuals = pd.DataFrame(model.resid())
-		fig, ax = plt.subplots(1,2)
-		residuals.plot(title="残差图", ax=ax[0])
-		residuals.plot(kind='kde', title='正态检验图', ax=ax[1])
-		plt.show()
-		plt.plot(df,label='实际值')
-		plt.plot(fc_series, color='darkgreen',label='预测均值')
+		fc_series_open = pd.Series(fc1, index=index_of_fc1-1)
+		lower_series_open = pd.Series(confint1[:, 0], index=index_of_fc1-1)
+		upper_series_open = pd.Series(confint1[:, 1], index=index_of_fc1-1)
+
+		fc2, confint2 = model_close.predict(n_periods=self.__n_periods__, return_conf_int=True)
+		index_of_fc2 = np.arange(len(df2), len(df2)+self.__n_periods__)
+		# make series for plotting purpose
+		fc_series_close = pd.Series(fc2, index=index_of_fc2-1)
+		lower_series_close = pd.Series(confint2[:, 0], index=index_of_fc2-1)
+		upper_series_close = pd.Series(confint2[:, 1], index=index_of_fc2-1)	
+
+		plt.plot(df3, color='#1E90FF',label='历史开盘价')
+		plt.plot(fc_series_open, color='#4682B4',label='开盘价_预测均值')
 		plt.legend(loc ='best')
-		plt.fill_between(lower_series.index, 
-		                 lower_series, 
-		                 upper_series, 
+		plt.fill_between(lower_series_open.index, 
+		                 lower_series_open, 
+		                 upper_series_open, 
 		                 color='k', alpha=.15)
-		#作图
+
+		plt.plot(df2, color='orange',label='历史收盘价')
+		plt.plot(fc_series_close, color='red',label='收盘价预测均值')
+		plt.legend(loc ='best')	
+		plt.fill_between(lower_series_close.index, 
+		                 lower_series_close, 
+		                 upper_series_close, 
+		                 color='k', alpha=.15)		
 		plt.rc('font', size=7)
-		plt.title("%s收盘价预测"%self.name)
-		plt.xlim(1,len(df)+5)
-		plt.ylim(df[len(df)-1]-5,df[len(df)-1]+5)
-		return(fc_series)
+		plt.title("%s(%s)开盘价&收盘价预测"%(self.name,code_to_name(self.name)))
+		plt.xlim(1,len(df3)+5)
+		plt.ylim(df2.min()-10,df3.max()+10)
+
+		residuals1 = pd.DataFrame(model_open.resid())
+		residuals2 = pd.DataFrame(model_close.resid())	
+
+		# plot resid
+		fig, ax = plt.subplots(2,2)
+		residuals1.plot(title="残差图（开盘价）", ax=ax[0,0])
+		residuals1.plot(kind='kde', title='正态检验图（开盘价）', ax=ax[0,1])
+		residuals2.plot(title="残差图（收盘价）", ax=ax[1,0])
+		residuals2.plot(kind='kde', title='正态检验图（收盘价）', ax=ax[1,1])
+		plt.show()
+		#return(fc_series_open.iloc[0],fc_series_close.iloc[0])
 
 	def ExpReturn1(self):
 		'''
 		使用时间序列方法计算期望收益率
-		'''
-		model = self.forcast_model()
-		print(model.summary())
-		# Forecast
-		fc, confint = model.predict(n_periods=self.__n_periods__, return_conf_int=True)
-		fc_series = pd.Series(fc)		
-		forcast=fc_series.iloc[0]
+		'''		
+		fc_close=self.forcast()[1]
+		forcast=fc_close
 		now=self.df['close'][len(self.df)-1]
 		rate=(forcast-now)/now
 		#print('期望收益率为%s'%rate)
@@ -207,22 +286,26 @@ class stock():
 
 	def ExpReturn2(self):
 		'''
-		历史收益率均值,返回一个值
+		历史收益率均值计算方法2,返回一个值
 		'''
-		df1=self.df
-		df1=pd.DataFrame(df1['close'])
-		df1.index=[i for i in range(len(df1))]
-		df=df1.close
-		Return=[]
-		for i in range(len(df)-1):
-			Return.append((df[i+1]-df[i])/df[i])
-		Return=np.array(Return).mean()
-		#print('期望收益率为%s'%Return)
-		return(Return)	
+		r=self.His_Return2().mean()
+		return(r)	
+	
+
+	def ExpReturn3(self):
+		'''
+		使用时间序列方法预测期望收益率
+		'''
+		[fc_series_open,fc_series_close] = self.forcast()
+		close = self.df['close'][-1]
+		a=(fc_series_open/close)-1
+		b=(fc_series_close/fc_series_open)-1
+		r=a+b
+		return(r)	
 
 	def His_Return(self):
 		'''
-		所有历史收益率,返回一个列表
+		基于收盘价计算历史收益率,返回一个列表
 		'''
 		n=900 #取过去n个交易日数据
 		df1=self.df.reset_index().iloc[-n:,:6]  
@@ -234,10 +317,35 @@ class stock():
 			Return.append((df[i+1]-df[i])/df[i])
 		return(np.array(Return))
 	
+
+	def His_Return2(self):
+		'''
+		历史收益率计算方法2,返回列表
+		'''
+		n=900
+		data=self.df.reset_index().iloc[-n:,:6]
+		if len(data) < n :
+			n=len(data)
+		R = []
+		for i in range(len(self.df)-n,len(self.df)-1):
+			if  i > len(self.df)-n :
+				a = (data['open'][i]/data['open'][i-1])-1
+			elif i == len(self.df)-n:
+				a = 0
+			b = (data['close'][i]/data['open'][i])-1
+			R.append (a+b)
+		return(np.array(R))		
+
+	def total_ave_return(self):
+		data = self.df
+		n=len(data)
+		R=((data['close'][n-1]/data['close'][0])-1)/n
+		return R
+
 	@ property
 	def sharp_rate(self):
-		ER = self.His_Return().mean() # 资产的平均收益率
-		sigma = self.His_Return().std() # 资产收益率的标准差
+		ER = self.His_Return2().mean() # 资产的平均收益率
+		sigma = self.His_Return2().std() # 资产收益率的标准差
 		rate = (ER-RF)/sigma
 		return rate
 
@@ -327,7 +435,7 @@ def sigma_rp(ExpCov,PortWts,m):
 '''
 <6> 计算组合的beta系数
 '''
-def beta(sigma_rp,singma_rm): 
+def beta(sigma_r_p,singma_rm): 
 	'''
 	sigma_rp 是资本市场线是 资本市场组合 的预期风险
 	sigma_rm 是组合前沿上 m点的 风险组合 的预期风险
@@ -344,7 +452,8 @@ def beta(sigma_rp,singma_rm):
 
 	beta值也代表用于投资风险组合的资金比率
 	'''
-	return sigma_rp/singma_rm
+	b = float(sigma_r_p/singma_rm)
+	return b
 
 
 '''
@@ -362,4 +471,5 @@ class plan():
 			df = ak.stock_zh_a_daily(symbol=stock, adjust="qfq")
 			money=self.PortWts[i]*self.assets_amount
 			amount=math.floor(money/(df['close'][len(df)-1]*100))*100
-			print('股票%s(%s)购买%s股'%(stock,code_to_name(stock),amount))
+			if amount > 0 :
+				print('股票%s(%s)购买%s股'%(stock,code_to_name(stock),amount))
