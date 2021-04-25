@@ -39,7 +39,6 @@ for i in range(len(data)):
        RF.append(data['收益率(%)'][i]/100)
 RF=np.array(RF).mean()
 
-
 '''
 以下为框架主体
 '''
@@ -275,7 +274,7 @@ class stock():
 
 	def ExpReturn1(self):
 		'''
-		使用时间序列方法计算期望收益率
+		使用时间序列方法计算期望收益率,只考虑收盘价
 		'''		
 		fc_close=self.forcast()[1]
 		forcast=fc_close
@@ -286,7 +285,7 @@ class stock():
 
 	def ExpReturn2(self):
 		'''
-		历史收益率均值计算方法2,返回一个值
+		历史收益率均值计算方法2,同时考虑开盘价和收盘价的波动,最后返回一个值
 		'''
 		r=self.His_Return2().mean()
 		return(r)	
@@ -294,7 +293,7 @@ class stock():
 
 	def ExpReturn3(self):
 		'''
-		使用时间序列方法预测期望收益率
+		使用时间序列方法预测期望收益率（同时考虑开盘价和收盘价的波动）
 		'''
 		[fc_series_open,fc_series_close] = self.forcast()
 		close = self.df['close'][-1]
@@ -320,7 +319,8 @@ class stock():
 
 	def His_Return2(self):
 		'''
-		历史收益率计算方法2,返回列表
+		历史收益率计算方法2（同时考虑开盘价和收盘价的波动）
+		返回列表,用以计算波动
 		'''
 		n=900
 		data=self.df.reset_index().iloc[-n:,:6]
@@ -342,12 +342,7 @@ class stock():
 		R=((data['close'][n-1]/data['close'][0])-1)/n
 		return R
 
-	@ property
-	def sharp_rate(self):
-		ER = self.His_Return2().mean() # 资产的平均收益率
-		sigma = self.His_Return2().std() # 资产收益率的标准差
-		rate = (ER-RF)/sigma
-		return rate
+
 
 
 
@@ -399,7 +394,11 @@ def Get_M(postive_target_returns,postive_target_variance,RF):
     # 定义一个函数用来 计算 前后两点在 证券市场线上的值
     def value(k,RF,x):
         return k*x+RF
-    # 计算 M 点
+    # 计算 M 点 
+	'''
+	这里 M 指的是在有效前沿上M点的位置,在所有前沿组合上的位置需要转换：
+	m=len(target_returns)-len(postive_target_returns)+M
+	'''
     K=[]
     for i in range(len(postive_target_variance)):
         k = (postive_target_returns[i]-RF)/postive_target_variance[i]
@@ -425,12 +424,9 @@ def sigma_rp(ExpCov,PortWts,m):
 	'''
 	sigma(r_p)=[ ∑ ∑ w_i w_j cov( r_i , r_j ) ]^(1/2)
 	'''
-	sigma_r_p=0
-	w=PortWts[m]
-	for i in range(len(ExpCov)):
-		for j in range(len(ExpCov)):
-			cov_ri_rj = ExpCov[i][j]
-			sigma_r_p += w[i]*w[j]*cov_ri_rj
+	w=np.matrix(PortWts[m])
+	cov=np.matrix(ExpCov)
+	sigma_r_p=math.sqrt(np.dot(np.dot(w,cov),w.T)[0,0])
 	return sigma_r_p
 '''
 <6> 计算组合的beta系数
@@ -447,6 +443,7 @@ def beta(sigma_r_p,singma_rm):
 		险补偿  (进取型证券)
 		beta<1：该证券的风险补偿小于市场组合的风
 		险补偿 （防御型证券)
+		beta=1: 则说明该组合就是市场组合
 
 	由 beta_p = ∑ w_i*beta_i 可以得出每支股票的beta值 
 
@@ -455,6 +452,14 @@ def beta(sigma_r_p,singma_rm):
 	b = float(sigma_r_p/singma_rm)
 	return b
 
+'''
+<7> 计算组合的夏普比
+'''
+def sharp_rate(E_R,sigma):
+	ER = E_R # 资产的平均收益率
+	Sigma = sigma # 资产收益率的标准差
+	rate = (ER-RF)/sigma
+	return rate
 
 '''
 按照选择的组合计算股票购买量
