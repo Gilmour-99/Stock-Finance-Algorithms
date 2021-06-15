@@ -42,6 +42,7 @@ Algorithms of Stock &amp; Finance Models
   2、将开盘价也加入到波动计算中
 
   3、更好的显示有效前沿及市场组合图
-
+* 6/15更新
+  1、新增期权定价二叉树模型计算
   
 
